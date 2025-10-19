@@ -1,0 +1,362 @@
+--[[
+LocalScript: Halloween Loader + Dupe Candy (UI only, client-side)
+Coloque em StarterGui ou StarterPlayerScripts.
+AVISO: Este script modifica APENAS GUI do cliente (PlayerGui).
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local LOCAL_PLAYER = Players.LocalPlayer
+local PLAYER_GUI = LOCAL_PLAYER:WaitForChild("PlayerGui")
+
+-- CONFIGURAÇÃO
+local LOADING_STAGE_SECONDS = 120        -- 2 minutos
+local DEHASH_STAGE_SECONDS = 120         -- 2 minutos
+local TOTAL_STAGES = {
+    { text = "loading script...", duration = LOADING_STAGE_SECONDS },
+    { text = "dehashing remotes...", duration = DEHASH_STAGE_SECONDS },
+}
+local PROGRESS_UPDATE_INTERVAL = 0.5     -- intervalo para atualizar barra
+local INCREMENT_MIN = 100                -- incremento mínimo por "tick"
+local INCREMENT_MAX = 2000               -- incremento máximo por "tick"
+local CLICK_TARGET_MIN = 500             -- incremento ao clicar (mínimo)
+local CLICK_TARGET_MAX = 5000            -- incremento ao clicar (máximo)
+local MAX_CAP = 200000                   -- cap máximo (evita saltos gigantes)
+local TICK_PERIOD = 0.07                 -- frequência da animação de número
+local UI_ANIM_TIME = 0.45                -- tempo dos tweens de abertura/fechamento
+
+-- UTILITÁRIOS
+local function formatWithCommas(n)
+    local s = tostring(math.floor(n + 0.5))
+    local k
+    while true do
+        s, k = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2")
+        if k == 0 then break end
+    end
+    return s
+end
+
+local function findAndReplaceNumberInText(text, newNumber)
+    if not text or text == "" then return tostring(newNumber) end
+    local s, e = string.find(text, "%d[%d%.,]*")
+    if s then
+        local prefix = string.sub(text, 1, s-1)
+        local suffix = string.sub(text, e+1, -1)
+        return prefix .. formatWithCommas(newNumber) .. suffix
+    else
+        return text .. " " .. formatWithCommas(newNumber)
+    end
+end
+
+-- Cria a ScreenGui principal (loading)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "HalloweenLoaderGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PLAYER_GUI
+
+local background = Instance.new("Frame")
+background.Name = "Background"
+background.Size = UDim2.new(1,0,1,0)
+background.Position = UDim2.new(0,0,0,0)
+background.BackgroundTransparency = 1
+background.Parent = screenGui
+
+local container = Instance.new("Frame")
+container.Name = "Container"
+container.Size = UDim2.new(0, 420, 0, 220)
+container.AnchorPoint = Vector2.new(0.5, 0.5)
+container.Position = UDim2.new(0.5, 0, 0.2, 0)
+container.BackgroundColor3 = Color3.fromRGB(22, 18, 28)
+container.BackgroundTransparency = 1
+container.BorderSizePixel = 0
+container.ClipsDescendants = true
+container.Rotation = -6
+container.Parent = background
+Instance.new("UICorner", container).CornerRadius = UDim.new(0,16)
+
+local accent = Instance.new("Frame")
+accent.Name = "Accent"
+accent.Size = UDim2.new(1, 0, 0, 8)
+accent.Position = UDim2.new(0, 0, 0, 0)
+accent.BorderSizePixel = 0
+accent.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+accent.Parent = container
+local accentGradient = Instance.new("UIGradient", accent)
+accentGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 120, 20)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 20, 255))
+}
+
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, -36, 0, 40)
+title.Position = UDim2.new(0, 18, 0, 12)
+title.BackgroundTransparency = 1
+title.Text = "🎃Adopt Me - Halloween Candy Duper GUI🎃"
+title.TextColor3 = Color3.fromRGB(238, 238, 238)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = container
+
+local statusText = Instance.new("TextLabel")
+statusText.Name = "Status"
+statusText.Size = UDim2.new(1, -36, 0, 36)
+statusText.Position = UDim2.new(0, 18, 0, 56)
+statusText.BackgroundTransparency = 1
+statusText.Text = "initializing..."
+statusText.TextColor3 = Color3.fromRGB(210,210,210)
+statusText.Font = Enum.Font.Gotham
+statusText.TextSize = 16
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+statusText.Parent = container
+
+local progressBG = Instance.new("Frame")
+progressBG.Name = "ProgressBG"
+progressBG.Size = UDim2.new(1, -36, 0, 12)
+progressBG.Position = UDim2.new(0, 18, 0, 100)
+progressBG.BackgroundColor3 = Color3.fromRGB(40, 36, 46)
+progressBG.BorderSizePixel = 0
+progressBG.Parent = container
+Instance.new("UICorner", progressBG).CornerRadius = UDim.new(0,8)
+
+local progressFill = Instance.new("Frame")
+progressFill.Name = "ProgressFill"
+progressFill.Size = UDim2.new(0, 0, 1, 0)
+progressFill.Position = UDim2.new(0,0,0,0)
+progressFill.BackgroundColor3 = Color3.fromRGB(255, 155, 0)
+progressFill.BorderSizePixel = 0
+progressFill.Parent = progressBG
+Instance.new("UICorner", progressFill).CornerRadius = UDim.new(0,8)
+
+-- Decorative pumpkin icon (servirá também como "fechar")
+local pumpkin = Instance.new("Frame")
+pumpkin.Name = "Pumpkin"
+pumpkin.Size = UDim2.new(0, 64, 0, 64)
+pumpkin.Position = UDim2.new(0, -32, 0, -32)
+pumpkin.AnchorPoint = Vector2.new(0,0)
+pumpkin.BackgroundColor3 = Color3.fromRGB(255,120,40)
+pumpkin.BorderSizePixel = 0
+pumpkin.Parent = container
+Instance.new("UICorner", pumpkin).CornerRadius = UDim.new(1,0)
+
+-- show entrance animation
+TweenService:Create(container, TweenInfo.new(UI_ANIM_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Position = UDim2.new(0.5, 0, 0.45, 0),
+    Rotation = 0,
+    BackgroundTransparency = 0
+}):Play()
+
+-- LOGICA de progressão
+local totalLoad = 0
+for _,s in ipairs(TOTAL_STAGES) do totalLoad = totalLoad + s.duration end
+
+local function setProgressFraction(frac)
+    frac = math.clamp(frac, 0, 1)
+    local targetWidth = progressBG.AbsoluteSize.X * frac
+    TweenService:Create(progressFill, TweenInfo.new(0.4, Enum.EasingStyle.Linear), {Size = UDim2.new(0, targetWidth, 1, 0)}):Play()
+end
+
+-- TARGETS GUI (caminhos que devem ser alterados)
+local targets = {
+    { path = {"AltCurrencyIndicatorApp", "CurrencyIndicator", "Container", "Amount"} },
+    { path = {"AltCurrencyPurchaseApp", "Frame", "Header", "InsetSpace", "Balance"} },
+}
+
+local function findGuiByPath(root, pathTable)
+    local node = root
+    for _,name in ipairs(pathTable) do
+        if not node then return nil end
+        node = node:FindFirstChild(name)
+    end
+    return node
+end
+
+-- estado do valor forçado
+local forcedValue = 0
+
+local function extractNumberFromText(t)
+    if not t or not t.Text then return 0 end
+    local s = string.match(t.Text, "%d[%d%.,]*")
+    if not s then return 0 end
+    local raw = string.gsub(s, "[,%.]", "")
+    return tonumber(raw) or 0
+end
+
+local function applyForcedValueToTargets()
+    for _,entry in ipairs(targets) do
+        local node = findGuiByPath(PLAYER_GUI, entry.path)
+        if node and (node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox")) then
+            local originalText = node.Text
+            node.Text = findAndReplaceNumberInText(originalText, forcedValue)
+        end
+    end
+end
+
+-- listeners para impedir que o jogo reescreva os textos
+local activeConnections = {}
+local function bindOverrideListeners()
+    for _,c in ipairs(activeConnections) do
+        pcall(function() c:Disconnect() end)
+    end
+    activeConnections = {}
+
+    for _,entry in ipairs(targets) do
+        spawn(function()
+            local path = entry.path
+            while true do
+                local node = findGuiByPath(PLAYER_GUI, path)
+                if node and (node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox")) then
+                    local con = node:GetPropertyChangedSignal("Text"):Connect(function()
+                        local desired = findAndReplaceNumberInText(node.Text, forcedValue)
+                        if node.Text ~= desired then
+                            node.Text = desired
+                        end
+                    end)
+                    table.insert(activeConnections, con)
+                    node.Text = findAndReplaceNumberInText(node.Text, forcedValue)
+                    break
+                end
+                wait(0.8)
+            end
+        end)
+    end
+end
+
+-- incrementa aos poucos até um alvo
+local incrementing = false
+local function incrementTo(target)
+    if incrementing then return end
+    incrementing = true
+    while forcedValue < target do
+        local step = math.random(INCREMENT_MIN, INCREMENT_MAX)
+        forcedValue = math.min(target, forcedValue + step)
+        forcedValue = math.min(forcedValue, MAX_CAP)
+        applyForcedValueToTargets()
+        wait(TICK_PERIOD)
+        if forcedValue >= MAX_CAP then break end
+    end
+    incrementing = false
+end
+
+-- tenta inicializar forcedValue a partir da GUI existente
+local function initializeForcedValue()
+    for _,entry in ipairs(targets) do
+        local node = findGuiByPath(PLAYER_GUI, entry.path)
+        if node and (node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox")) then
+            local n = extractNumberFromText(node)
+            if n and n > forcedValue then forcedValue = n end
+        end
+    end
+    applyForcedValueToTargets()
+end
+
+-- função que revela a UI principal (cria mainPanel e dupeButton APÓS o loading)
+local function revealMainUI()
+    -- animações de saída do loading
+    TweenService:Create(statusText, TweenInfo.new(UI_ANIM_TIME, Enum.EasingStyle.Quad), {TextTransparency = 1}):Play()
+    TweenService:Create(progressBG, TweenInfo.new(UI_ANIM_TIME, Enum.EasingStyle.Quad), {BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 0)}):Play()
+    wait(UI_ANIM_TIME + 0.06)
+
+    -- esconder status/progress (remove para evitar clicar)
+    statusText:Destroy()
+    progressBG:Destroy()
+
+    -- agora criamos o painel principal e o botão (aparecem somente agora)
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = UDim2.new(1, -36, 0, 86)
+    mainPanel.Position = UDim2.new(0, 18, 0, 124)
+    mainPanel.BackgroundTransparency = 1
+    mainPanel.Parent = container
+
+    local dupeButton = Instance.new("TextButton")
+    dupeButton.Name = "DupeButton"
+    dupeButton.Size = UDim2.new(0.6, 0, 0, 44)
+    dupeButton.Position = UDim2.new(0.2, 0, 0, 10)
+    dupeButton.BackgroundColor3 = Color3.fromRGB(46, 42, 56)
+    dupeButton.BorderSizePixel = 0
+    dupeButton.Text = "Dupe Candy"
+    dupeButton.Font = Enum.Font.GothamBold
+    dupeButton.TextSize = 18
+    dupeButton.TextColor3 = Color3.fromRGB(242, 242, 242)
+    dupeButton.Parent = mainPanel
+    Instance.new("UICorner", dupeButton).CornerRadius = UDim.new(0,12)
+
+    -- pequeno efeito de entrada para o botão
+    dupeButton.TextTransparency = 1
+    TweenService:Create(dupeButton, TweenInfo.new(UI_ANIM_TIME, Enum.EasingStyle.Sine), {TextTransparency = 0}):Play()
+
+    -- conectar o clique: lógica de incremento (agora o botão existe só depois do loading)
+    dupeButton.MouseButton1Click:Connect(function()
+        if forcedValue < 50000 then
+            forcedValue = math.random(50000, 60000)
+            if forcedValue > MAX_CAP then forcedValue = MAX_CAP end
+            applyForcedValueToTargets()
+            bindOverrideListeners()
+            return
+        end
+        local target = forcedValue + math.random(CLICK_TARGET_MIN, CLICK_TARGET_MAX)
+        if target > MAX_CAP then target = MAX_CAP end
+        spawn(function() incrementTo(target) end)
+    end)
+end
+
+-- run loading sequence (completa os estágios e depois chama finalize)
+local function runLoadingSequence(onComplete)
+    spawn(function()
+        local soFar = 0
+        for i,stage in ipairs(TOTAL_STAGES) do
+            statusText.Text = stage.text
+            local startTime = tick()
+            while tick() - startTime < stage.duration do
+                local t = (tick() - startTime) / stage.duration
+                local frac = (soFar + t * stage.duration) / totalLoad
+                setProgressFraction(frac)
+                wait(PROGRESS_UPDATE_INTERVAL)
+            end
+            soFar = soFar + stage.duration
+        end
+        setProgressFraction(1)
+        wait(0.25)
+        if onComplete then onComplete() end
+    end)
+end
+
+-- finalize handler
+local function finalize()
+    -- esconder completamente o container de loading com tween (pequeno deslocamento)
+    TweenService:Create(container, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {Position = UDim2.new(0.5, 0, 0.4, 0), Rotation = 0}):Play()
+    wait(0.12)
+    -- agora criar a UI principal dentro do container
+    revealMainUI()
+    -- inicializa e prende os listeners para sobrescrever textos do jogo
+    initializeForcedValue()
+    bindOverrideListeners()
+    -- rotina de reaplicação periódica (redundância)
+    spawn(function()
+        while true do
+            applyForcedValueToTargets()
+            wait(1.2)
+        end
+    end)
+end
+
+-- executar sequência
+runLoadingSequence(finalize)
+
+-- pumpkin click: fecha toda a UI (qualquer hora)
+pumpkin.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        TweenService:Create(container, TweenInfo.new(UI_ANIM_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, 0.12, 0),
+            Rotation = -6,
+            BackgroundTransparency = 1
+        }):Play()
+        delay(UI_ANIM_TIME + 0.05, function()
+            container.Visible = false
+        end)
+    end
+end)
