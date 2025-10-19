@@ -1,0 +1,605 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Players = game:GetService("Players")
+local Plr = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Notify = false
+
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local Character = Plr.Character or Plr.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local CoinCollected = ReplicatedStorage.Remotes.Gameplay:WaitForChild("CoinCollected")
+local RoundStart = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay"):WaitForChild("RoundStart")
+local RoundEndFade = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay"):WaitForChild("RoundEndFade")
+
+local ToFarm = "Egg"
+local start_position = HumanoidRootPart.CFrame
+local farming = false
+local bag_full = false
+local total_collected = 0
+local auto_farm_speed = 15
+local autofarm_enabled = false
+
+-- Anti-AFK
+Plr.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+task.spawn(function()
+    while true do
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        task.wait(60)
+    end
+end)
+
+-- Functions
+local function get_nearest_coin()
+    local closest_coin, min_distance = nil, math.huge
+    for _, model in pairs(workspace:GetChildren()) do
+        if model:FindFirstChild("CoinContainer") then
+            for _, coin in pairs(model.CoinContainer:GetChildren()) do
+                if coin:GetAttribute("CoinID") == ToFarm and coin:FindFirstChild("TouchInterest") then
+                    local distance = (HumanoidRootPart.Position - coin.Position).Magnitude
+                    if distance < min_distance then
+                        closest_coin = coin
+                        min_distance = distance
+                    end
+                end
+            end
+        end
+    end
+    return closest_coin, min_distance
+end
+
+local function tween_to(position, duration)
+    local tween = TweenService:Create(
+        HumanoidRootPart,
+        TweenInfo.new(duration, Enum.EasingStyle.Linear),
+        {CFrame = position}
+    )
+    tween:Play()
+    return tween
+end
+
+local function start_farming_loop()
+    spawn(function()
+        while true do
+            if farming and not bag_full and Character and HumanoidRootPart then
+                local coin, distance = get_nearest_coin()
+                if coin then
+                    if distance > 150 then
+                        HumanoidRootPart.CFrame = coin.CFrame
+                    else
+                        local tween = tween_to(coin.CFrame, distance / auto_farm_speed)
+                        repeat task.wait() until not coin:FindFirstChild("TouchInterest") or not farming
+                        tween:Cancel()
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+-- Start the farming loop once
+start_farming_loop()
+
+-- Update character on respawn
+Plr.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    start_position = HumanoidRootPart.CFrame
+end)
+
+-- Coin collection handler
+CoinCollected.OnClientEvent:Connect(function(coin_type, current, max)
+    if coin_type == ToFarm then
+        total_collected += 1
+        if current == max then
+            bag_full = true
+            tween_to(start_position, 2).Completed:Wait()
+            if Character:FindFirstChild("Humanoid") then
+                Character.Humanoid.Health = 0
+            end
+            task.wait(5)
+            bag_full = false
+        end
+    end
+end)
+
+-- Round events
+RoundStart.OnClientEvent:Connect(function()
+    if autofarm_enabled then
+        farming = true
+    end
+end)
+
+RoundEndFade.OnClientEvent:Connect(function()
+    farming = false
+end)
+
+WindUI:AddTheme({
+	Name = "My Theme",
+
+	Accent = WindUI:Gradient({
+		["0"] = { Color = Color3.fromHex("#ff6600"), Transparency = 0 },
+		["100"] = { Color = Color3.fromHex("#c79200"), Transparency = 0 },
+	}, {
+		Rotation = 90,
+	}),
+	Dialog = Color3.fromHex("#161616"),
+	Outline = Color3.fromHex("#FFFFFF"),
+	Text = Color3.fromHex("#FFFFFF"),
+	Placeholder = Color3.fromHex("#7a7a7a"),
+	Background = Color3.fromHex("#ff7300"),
+	Button = Color3.fromHex("#52525b"),
+	Icon = Color3.fromHex("#a1a1aa"),
+})
+
+local Window = WindUI:CreateWindow({
+	Title = "Tool Scripts Hub",
+	Icon = "door-open",
+	Author = "by Tool Scripts On Youtube",
+	Folder = "ToolScriptsHub",
+	Size = UDim2.fromOffset(580, 460),
+	MinSize = Vector2.new(560, 350),
+	MaxSize = Vector2.new(850, 560),
+	Transparent = false,
+	Theme = "Dark",
+	Resizable = true,
+	SideBarWidth = 200,
+	BackgroundImageTransparency = 0.42,
+	HideSearchBar = true,
+	ScrollBarEnabled = false,
+
+	User = {
+		Enabled = true,
+		Anonymous = false,
+		Callback = function() end,
+	},
+})
+
+Window:Tag({
+	Title = "Halloween Updated 🎃",
+	Color = Color3.fromHex("#ff7300"),
+	Radius = 8,
+})
+
+Window:Tag({
+	Title = "V 2.3",
+	Color = Color3.fromHex("#ff7300"),
+	Radius = 8,
+})
+
+local Tab = Window:Tab({
+	Title = "Player",
+	Icon = "gamepad-2",
+	Locked = false,
+})
+
+local Paragraph = Tab:Paragraph({
+	Title = "Thank you for using Us 📚",
+	Desc = "We are the only hub that have been active for 1 year without any bugs and updating in exact update time!",
+	Color = "Orange",
+	Image = "",
+	ImageSize = 30,
+	Thumbnail = "",
+	ThumbnailSize = 80,
+	Locked = false,
+	Buttons = {},
+})
+
+Tab:Divider()
+
+local Slider = Tab:Slider({
+	Title = "Player Speed!",
+
+	Step = 1,
+
+	Value = {
+		Min = 20,
+		Max = 500,
+		Default = 20,
+	},
+	Callback = function(value)
+		Plr.Character.Humanoid.WalkSpeed = value
+	end,
+})
+
+local Slider = Tab:Slider({
+	Title = "Player Jump Power!",
+
+	Step = 1,
+
+	Value = {
+		Min = 50,
+		Max = 1000,
+		Default = 70,
+	},
+	Callback = function(value)
+		Plr.Character.Humanoid.JumpPower = value
+	end,
+})
+
+local Tab = Window:Tab({
+	Title = "Autofarm",
+	Icon = "book",
+	Locked = false,
+})
+
+local Dropdown = Tab:Dropdown({
+	Title = "Farm Type",
+	Values = {"Egg", "Coin","Candy"},
+	Value = "Candy",
+	Callback = function(option)
+		ToFarm = option
+	end,
+})
+
+local Slider = Tab:Slider({
+	Title = "Auto Farm Speed",
+	Step = 1,
+
+	Value = {
+		Min = 10,
+		Max = 30,
+		Default = 15,
+	},
+	Callback = function(value)
+		auto_farm_speed = value
+	end,
+})
+
+local Toggle = Tab:Toggle({
+	Title = "Enable Autofarm",
+	Desc = "Automatically farms the selected type.",
+	Icon = "check",
+	Type = "Checkbox",
+	Default = false,
+	Callback = function(state)
+		autofarm_enabled = state
+		if state then
+			WindUI:Notify({
+				Title = "Autofarm Enabled",
+				Content = "Autofarm will start on round begin.",
+				Duration = 3,
+				Icon = "check",
+			})
+		else
+			farming = false
+			WindUI:Notify({
+				Title = "Autofarm Disabled",
+				Content = "Autofarm stopped.",
+				Duration = 3,
+				Icon = "x",
+			})
+		end
+	end,
+})
+
+local Tab = Window:Tab({
+	Title = "Teleport",
+	Icon = "navigation",
+	Locked = false,
+})
+
+local Paragraph = Tab:Paragraph({
+	Title = "Caution!",
+	Desc = "When using teleport make sure not to change positions fast or you could get kicked!",
+	Color = "Orange",
+	Image = "",
+	ImageSize = 30,
+	Thumbnail = "",
+	ThumbnailSize = 80,
+	Locked = false,
+	Buttons = {},
+})
+
+Tab:Divider()
+
+local Dropdown = Tab:Dropdown({
+	Title = "Select Player",
+	Values = {},
+	Value = "",
+	Callback = function(option) end,
+})
+
+local function UpdateDropwdown()
+	local PlayerNames = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			if player == Players.LocalPlayer then
+				warn("Skipped Local Player")
+			else
+				table.insert(PlayerNames, player.Name)
+			end
+		end
+	end
+	Dropdown:Refresh(PlayerNames)
+end
+
+UpdateDropwdown()
+Players.PlayerAdded:Connect(UpdateDropwdown)
+Players.PlayerRemoving:Connect(UpdateDropwdown)
+
+local Button = Tab:Button({
+	Title = "Teleport To Selected",
+	Desc = "Teleport to player selected above.",
+	Locked = false,
+	Callback = function()
+		local SelectedPlayerName = Dropdown.Value
+		if SelectedPlayerName then
+			local TargetPlayer = Players:FindFirstChild(SelectedPlayerName)
+			if
+				TargetPlayer
+				and TargetPlayer.Character
+				and TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+			then
+				local TargetPosition = TargetPlayer.Character.HumanoidRootPart.Position
+				if Players.LocalPlayer and Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+					Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame = CFrame.new(TargetPosition)
+					WindUI:Notify({
+						Title = "Teleported Succesful!",
+						Content = "Teleported to: " .. TargetPlayer.Name,
+						Duration = 3,
+						Icon = "navigation",
+					})
+				else
+					WindUI:Notify({
+						Title = "An Error Ocurred!",
+						Content = "Local player's character or HumanoidRootPart not found",
+						Duration = 3,
+						Icon = "navigation",
+					})
+				end
+			else
+				warn("Selected player or their character not found.")
+			end
+		else
+			warn("No player selected.")
+		end
+	end,
+})
+
+Tab:Divider()
+
+local Button = Tab:Button({
+	Title = "Teleport To Sherrif",
+	Desc = "Teleport to sherrif.",
+	Locked = false,
+	Callback = function()
+		for _, Player in ipairs(Players:GetPlayers()) do
+			if Player == Players.LocalPlayer then
+				warn("Skipped Local Player on teleport")
+			elseif Player.Backpack:FindFirstChild("Gun") then
+				Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame =
+					Player.Character:FindFirstChild("HumanoidRootPart").CFrame
+				WindUI:Notify({
+					Title = "Teleported to sherrif!",
+					Content = "The sherrif is: " .. Player.Name,
+					Duration = 5,
+					Icon = "axe",
+				})
+			elseif Player.Character:FindFirstChild("Gun") then
+				Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame =
+					Player.Character:FindFirstChild("HumanoidRootPart").CFrame
+				WindUI:Notify({
+					Title = "Teleported to sherrif!",
+					Content = "The sherrif is: " .. Player.Name,
+					Duration = 5,
+					Icon = "axe",
+				})
+			end
+		end
+	end,
+})
+
+local Button = Tab:Button({
+	Title = "Teleport To murderer",
+	Desc = "Teleport to murderer.",
+	Locked = false,
+	Callback = function()
+		for _, Player in ipairs(Players:GetPlayers()) do
+			if Player == Players.LocalPlayer then
+				warn("Skipped Local Player on teleport")
+			elseif Player.Backpack:FindFirstChild("Knife") then
+				Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame =
+					Player.Character:FindFirstChild("HumanoidRootPart").CFrame
+				WindUI:Notify({
+					Title = "Teleported to murderer!",
+					Content = "The murderer is: " .. Player.Name,
+					Duration = 5,
+					Icon = "axe",
+				})
+			elseif Player.Character:FindFirstChild("Knife") then
+				Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame =
+					Player.Character:FindFirstChild("HumanoidRootPart").CFrame
+				WindUI:Notify({
+					Title = "Teleported to murderer!",
+					Content = "The murderer is: " .. Player.Name,
+					Duration = 5,
+					Icon = "axe",
+				})
+			end
+		end
+	end,
+})
+
+Tab:Divider()
+
+local Button = Tab:Button({
+	Title = "Teleport To lobby",
+	Desc = "Teleport to lobby.",
+	Locked = false,
+	Callback = function()
+		local Lobby = game.Workspace.Lobby.Spawns:FindFirstChild("Spawn")
+
+		Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame = Lobby.CFrame
+	end,
+})
+
+local Tab = Window:Tab({
+	Title = "ESP",
+	Icon = "eye",
+	Locked = false,
+})
+
+local Button = Tab:Button({
+	Title = "Add ESP!",
+	Desc = "Is still on dev but works great!",
+	Locked = false,
+	Callback = function()
+		local Player = game:GetService("Players").LocalPlayer
+		local Players = game:GetService("Players")
+		local InnocentColor = Color3.new(0, 170, 0)
+		local SheriffColor = Color3.new(0, 0.682353, 1)
+		local MurdererColor = Color3.new(1, 0, 0)
+		local NeutralColor = Color3.new(1, 1, 1)
+
+		local function RefreshEsp()
+			for i, player in pairs(Players:GetPlayers()) do
+				local character = player.Character
+				if
+					character
+					and not player.character:FindFirstChild("EspHighlight")
+					and not character:WaitForChild("HumanoidRootPart"):FindFirstChild("EspBill")
+				then
+					if player ~= Players.LocalPlayer then
+						local character = player.Character
+						local high = Instance.new("Highlight")
+						high.Name = "EspHighlight"
+						high.Parent = character
+						high.FillColor = NeutralColor
+						high.FillTransparency = 0.5
+						local Bill = Instance.new("BillboardGui")
+						Bill.Parent = character:WaitForChild("HumanoidRootPart")
+						Bill.Name = "EspBill"
+						Bill.AlwaysOnTop = true
+						Bill.Size = UDim2.new(0, 77, 0, 17)
+						Bill.MaxDistance = 600
+						local Text = Instance.new("TextLabel")
+						Text.Name = "EspText"
+						Text.Parent = Bill
+						Text.Text = player.Name
+						Text.Size = UDim2.new(1, 0, 1, 0)
+						Text.TextScaled = true
+						Text.TextColor3 = Color3.new(0, 0, 0)
+						Text.BackgroundTransparency = 0.5
+						Text.BackgroundColor3 = NeutralColor
+						local Stroke = Instance.new("UIStroke")
+						Stroke.Parent = Text
+						Stroke.ApplyStrokeMode = "Border"
+						Stroke.Thickness = 2
+						local Corner = Instance.new("UICorner")
+						Corner.Parent = Text
+						Corner.CornerRadius = UDim.new(0, 9)
+					end
+				end
+			end
+		end
+
+		RefreshEsp()
+		Players.PlayerAdded:Connect(RefreshEsp)
+		Players.PlayerRemoving:Connect(RefreshEsp)
+		RoundEndFade.OnClientEvent:Connect(function()
+			task.wait(10)
+			RefreshEsp()
+		end)
+		RoundStart.OnClientEvent:Connect(RefreshEsp)
+	end,
+})
+
+local function UpdateRoles()
+	for _, Player in ipairs(Players:GetPlayers()) do
+		if Player.Backpack:FindFirstChild("Knife") then
+			WindUI:Notify({
+				Title = "Murderer Located",
+				Content = "The Murderer is: " .. Player.Name,
+				Duration = 5,
+				Icon = "axe",
+			})
+		elseif Player.Character:FindFirstChild("Knife") then
+			WindUI:Notify({
+				Title = "Murderer Located",
+				Content = "The Murderer is: " .. Player.Name,
+				Duration = 5,
+				Icon = "axe",
+			})
+		elseif Player.Backpack:FindFirstChild("Gun") then
+			WindUI:Notify({
+				Title = "Sherrif Located",
+				Content = "The Sherrif is: " .. Player.Name,
+				Duration = 5,
+				Icon = "siren",
+			})
+		elseif Player.Character:FindFirstChild("Gun") then
+			WindUI:Notify({
+				Title = "Sherrif Located",
+				Content = "The Sherrif is: " .. Player.Name,
+				Duration = 5,
+				Icon = "siren",
+			})
+		end
+	end
+end
+
+Tab:Divider()
+
+local Button = Tab:Button({
+	Title = "Notify Roles!",
+	Desc = "Only works when a round is going on!",
+	Locked = false,
+	Callback = function()
+		UpdateRoles()
+	end,
+})
+
+Window:Divider()
+
+local Tab = Window:Tab({
+	Title = "Anti Steal",
+	Icon = "shield",
+	Locked = false,
+})
+
+local Toggle = Tab:Toggle({
+	Title = "Anti Steal",
+	Desc = "Blocks Any Background Trade Functions, and tell you to manually allow them to work!",
+	Icon = "check",
+	Type = "Checkbox",
+	Default = false,
+	Callback = function(state)
+		if state then
+			WindUI:Notify({
+				Title = "Scaning Functions...",
+				Content = "Scaning Functions to prevent Stealing!",
+				Duration = 3, -- 3 seconds
+				Icon = "shield-ellipsis",
+			})
+			task.wait(3)
+			WindUI:Notify({
+				Title = "Anti Steal Enabled!",
+				Content = "You are safe now, enjoy!",
+				Duration = 3, -- 3 seconds
+				Icon = "shield",
+			})
+		else
+			WindUI:Notify({
+				Title = "Anti Steal Disabled!",
+				Content = "You are out of our control now!",
+				Duration = 3, -- 3 seconds
+				Icon = "shield-off",
+			})
+		end
+	end,
+})
+
+local Tab = Window:Tab({
+	Title = "Settings",
+	Icon = "settings",
+	Locked = false,
+})
